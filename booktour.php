@@ -1,4 +1,6 @@
 <?php
+session_start();
+
 $conn = new mysqli("localhost", "root", "", "tour_db");
 
 if ($conn->connect_error) {
@@ -7,25 +9,54 @@ if ($conn->connect_error) {
 
 // Get tour from URL
 $tour = $_GET['tour'] ?? '';
-$price = $_GET['price'] ?? 0;
 
 // Handle form submit
 if($_SERVER["REQUEST_METHOD"] == "POST"){
-    $name = $_POST['name'];
-    $email = $_POST['email'];
-    $phone = $_POST['phone'];
-    $tour = $_POST['tour'];
-    $people = $_POST['people'];
-    $date = $_POST['date'];
-    $total = $_POST['total'];
 
-    $conn->query("INSERT INTO bookings 
-    (name, email, phone, tour, people, date, total) 
-    VALUES 
-    ('$name','$email','$phone','$tour','$people','$date','$total')");
+    // ✅ Sanitize + validate
+    $name   = trim($_POST['name']);
+    $phone  = trim($_POST['phone']);
+    $tour   = $_POST['tour'];
+    $people = (int)$_POST['people'];
+    $date   = $_POST['date'];
 
-    $success = true;
-    
+    // 🔐 Use session email (NOT user input)
+    $email = $_SESSION['email'] ?? '';
+
+    if(!$email){
+        die("User not logged in");
+    }
+
+    // ✅ Fetch real price from DB
+    $stmt = $conn->prepare("SELECT price FROM tours WHERE name=?");
+    $stmt->bind_param("s", $tour);
+    $stmt->execute();
+    $result = $stmt->get_result();
+
+    if($result->num_rows === 0){
+        die("Invalid tour selected");
+    }
+
+    $row = $result->fetch_assoc();
+    $realPrice = (int)$row['price'];
+
+    // ✅ Calculate total on server
+    $total = $realPrice * $people;
+
+    // ✅ Insert booking securely
+    $stmt = $conn->prepare("INSERT INTO bookings 
+        (name, email, phone, tour, people, date, total, status) 
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
+
+    $stmt->bind_param("ssssisd",
+        $name, $email, $phone, $tour, $people, $date, $total
+    );
+
+    $stmt->execute();
+
+    // ✅ Redirect (clean UX)
+    header("Location: mybookings.php?success=1");
+    exit();
 }
 ?>
 

@@ -1,27 +1,29 @@
 <?php
 session_start();
 
-$conn = new mysqli("localhost", "root", "", "tour_db");
+require 'vendor/autoload.php';
 
-if ($conn->connect_error) {
-    die("DB Error");
-}
+// MongoDB connection
+$client = new MongoDB\Client("mongodb://127.0.0.1:27017");
+$db = $client->tour_db;
+$users = $db->users;
 
 if($_SERVER["REQUEST_METHOD"] == "POST"){
 
     $email = $_POST['email'];
     $password = $_POST['password'];
 
-    $result = $conn->query("SELECT * FROM users WHERE email='$email' AND password='$password'");
+    // MongoDB query
+    $user = $users->findOne([
+        'email' => $email,
+        'password' => $password
+    ]);
 
-    if($result->num_rows > 0){
-
-        $user = $result->fetch_assoc();
+    if($user){
 
         $_SESSION['user'] = $user['name'];
         $_SESSION['role'] = $user['role'];
         $_SESSION['email'] = $user['email'];
-
 
         // Role-based redirect
         if($user['role'] == 'admin'){

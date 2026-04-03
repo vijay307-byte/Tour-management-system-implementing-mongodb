@@ -1,9 +1,9 @@
 <?php
-$conn = new mysqli("localhost", "root", "", "tour_db");
+require 'vendor/autoload.php';
 
-if ($conn->connect_error) {
-    die("DB Error");
-}
+$client = new MongoDB\Client("mongodb://127.0.0.1:27017");
+$db = $client->tour_db;
+$users = $db->users;
 
 if($_SERVER["REQUEST_METHOD"] == "POST"){
 
@@ -11,15 +11,22 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
     $email = $_POST['email'];
     $password = $_POST['password'];
 
-    // Check if email exists
-    $check = $conn->query("SELECT * FROM users WHERE email='$email'");
+    // Check if email already exists
+    $existingUser = $users->findOne([
+        'email' => $email
+    ]);
 
-    if($check->num_rows > 0){
+    if($existingUser){
         $error = "Email already registered";
     } else {
 
-        $conn->query("INSERT INTO users (name, email, password, role)
-                      VALUES ('$name','$email','$password','user')");
+        // Insert user
+        $users->insertOne([
+            'name' => $name,
+            'email' => $email,
+            'password' => $password,
+            'role' => 'user'
+        ]);
 
         $success = "Account created! You can login now.";
     }

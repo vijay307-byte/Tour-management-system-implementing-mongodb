@@ -1,18 +1,20 @@
 <?php
 session_start();
 
+require 'vendor/autoload.php';
+
 // Access control
 if(!isset($_SESSION['role']) || $_SESSION['role'] != 'admin'){
     header("Location: login.php");
     exit();
 }
 
-// DB connection
-$conn = new mysqli("localhost", "root", "", "tour_db");
+// MongoDB connection
+$client = new MongoDB\Client("mongodb://127.0.0.1:27017");
+$db = $client->tour_db;
 
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
+$bookings = $db->bookings;
+$tours = $db->tours;
 
 // ================= ACTIONS =================
 
@@ -21,40 +23,51 @@ if(isset($_GET['action'])){
     $id = $_GET['id'];
 
     if($_GET['action'] == "approve"){
-        $conn->query("UPDATE bookings SET status='Approved' WHERE id=$id");
+        $bookings->updateOne(
+            ['_id' => new MongoDB\BSON\ObjectId($id)],
+            ['$set' => ['status' => 'Approved']]
+        );
     }
 
     if($_GET['action'] == "reject"){
-        $conn->query("UPDATE bookings SET status='Rejected' WHERE id=$id");
+        $bookings->updateOne(
+            ['_id' => new MongoDB\BSON\ObjectId($id)],
+            ['$set' => ['status' => 'Rejected']]
+        );
     }
 }
 
-// Add Tour (with image)
+// Add Tour
 if(isset($_POST['addTour'])){
 
     $name = $_POST['tour_name'];
-    $price = $_POST['tour_price'];
+    $price = (int)$_POST['tour_price'];
 
     $imageName = $_FILES['tour_image']['name'];
     $tempName = $_FILES['tour_image']['tmp_name'];
 
     $uploadPath = "images/" . $imageName;
-
     move_uploaded_file($tempName, $uploadPath);
 
-    $conn->query("INSERT INTO tours (name, price, image) 
-                  VALUES ('$name','$price','$imageName')");
+    $tours->insertOne([
+        'name' => $name,
+        'price' => $price,
+        'image' => $imageName
+    ]);
 }
 
 // Delete Tour
 if(isset($_GET['deleteTour'])){
     $id = $_GET['deleteTour'];
-    $conn->query("DELETE FROM tours WHERE id=$id");
+
+    $tours->deleteOne([
+        '_id' => new MongoDB\BSON\ObjectId($id)
+    ]);
 }
 
 // Fetch data
-$bookings = $conn->query("SELECT * FROM bookings");
-$tours = $conn->query("SELECT * FROM tours");
+$bookingList = $bookings->find();
+$tourList = $tours->find();
 ?>
 
 <!DOCTYPE html>
@@ -103,9 +116,9 @@ $tours = $conn->query("SELECT * FROM tours");
                 <th>Action</th>
             </tr>
 
-            <?php while($row = $bookings->fetch_assoc()): ?>
+            <?php foreach($bookingList as $row): ?>
             <tr>
-                <td><?php echo $row['id']; ?></td>
+                <td><?php echo $row['_id']; ?></td>
                 <td><?php echo $row['name']; ?></td>
                 <td><?php echo $row['tour']; ?></td>
                 <td><?php echo $row['people']; ?></td>
@@ -115,11 +128,11 @@ $tours = $conn->query("SELECT * FROM tours");
 
             <?php if($row['status'] == 'Pending'): ?>
 
-                <a class="btn btn-success btn-sm" href="?action=approve&id=<?php echo $row['id']; ?>">
+                <a class="btn btn-success btn-sm" href="?action=approve&id=<?php echo $row['_id']; ?>">
                     Approve
                 </a>
 
-                <a class="btn btn-danger btn-sm" href="?action=reject&id=<?php echo $row['id']; ?>">
+                <a class="btn btn-danger btn-sm" href="?action=reject&id=<?php echo $row['_id']; ?>">
                     Reject
                 </a>
 
@@ -131,7 +144,7 @@ $tours = $conn->query("SELECT * FROM tours");
 
             </td>
             </tr>
-            <?php endwhile; ?>
+            <?php endforeach; ?>
 
         </table>
 
@@ -170,19 +183,19 @@ $tours = $conn->query("SELECT * FROM tours");
                 <th>Action</th>
             </tr>
 
-            <?php while($t = $tours->fetch_assoc()): ?>
+            <?php foreach($tourList as $t): ?>
             <tr>
-                <td><?php echo $t['id']; ?></td>
+                <td><?php echo $t['_id']; ?></td>
                 <td><?php echo $t['name']; ?></td>
                 <td>₹<?php echo $t['price']; ?></td>
                 <td>
                     <img src="images/<?php echo $t['image']; ?>" class="preview">
                 </td>
                 <td>
-                    <a class="btn btn-danger btn-sm" href="?deleteTour=<?php echo $t['id']; ?>">Delete</a>
+                    <a class="btn btn-danger btn-sm" href="?deleteTour=<?php echo $t['_id']; ?>">Delete</a>
                 </td>
             </tr>
-            <?php endwhile; ?>
+            <?php endforeach; ?>
 
         </table>
 

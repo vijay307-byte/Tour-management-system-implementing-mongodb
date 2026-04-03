@@ -1,33 +1,40 @@
 <?php
 session_start();
 
+require 'vendor/autoload.php';
+
 // Must be logged in
 if(!isset($_SESSION['user'])){
     header("Location: login.php");
     exit();
 }
 
-$conn = new mysqli("localhost", "root", "", "tour_db");
+// MongoDB connection
+$client = new MongoDB\Client("mongodb://127.0.0.1:27017");
+$db = $client->tour_db;
 
-if ($conn->connect_error) {
-    die("DB Error: " . $conn->connect_error);
-}
+$bookings = $db->bookings;
 
 // Get logged-in user's email
 $email = $_SESSION['email'];
 
-// Fetch bookings
-$result = $conn->query("SELECT * FROM bookings WHERE email='$email' ORDER BY id DESC");
-
+// Fetch bookings (latest first)
+$bookingList = $bookings->find(
+    ['email' => $email],
+    ['sort' => ['_id' => -1]]
+);
 
 // Handle cancel booking
 if(isset($_GET['cancel'])){
     $id = $_GET['cancel'];
 
-    // Only cancel user's own booking
-    $conn->query("UPDATE bookings 
-                  SET status='Cancelled' 
-                  WHERE id=$id AND email='$email'");
+    $bookings->updateOne(
+        [
+            '_id' => new MongoDB\BSON\ObjectId($id),
+            'email' => $email // ensure user owns booking
+        ],
+        ['$set' => ['status' => 'Cancelled']]
+    );
 }
 ?>
 
@@ -98,13 +105,12 @@ if(isset($_GET['cancel'])){
             </tr>
             
 
-            <?php if($result->num_rows > 0): ?>
-
-            <?php while($row = $result->fetch_assoc()): ?>
+         <?php $hasData = false; ?>
+         <?php foreach($bookingList as $row): $hasData = true; ?>
 
             <tr>
 
-                <td><?php echo $row['id']; ?></td>
+                <td><?php echo $row['_id']; ?></td>
 
                 <td><?php echo $row['tour']; ?></td>
 
@@ -130,7 +136,7 @@ if(isset($_GET['cancel'])){
                 <td>
                     <?php if($row['status'] == 'Pending'): ?>
 
-                    <a href="?cancel=<?php echo $row['id']; ?>" class="btn btn-danger btn-sm"
+                    <a href="?cancel=<?php echo $row['_id']; ?>" class="btn btn-danger btn-sm"
                         onclick="return confirm('Cancel this booking?')">
                         Cancel
                     </a>
@@ -143,9 +149,9 @@ if(isset($_GET['cancel'])){
                 </td>
             </tr>
 
-            <?php endwhile; ?>
+            <?php endforeach; ?>
 
-            <?php else: ?>
+            <?php if(!$hasData): ?>
 
             <tr>
                 <td colspan="6" class="text-center">No bookings found</td>
