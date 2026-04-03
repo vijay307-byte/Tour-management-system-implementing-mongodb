@@ -1,13 +1,16 @@
 <?php
 session_start();
 
-$conn = new mysqli("localhost", "root", "", "tour_db");
+require 'vendor/autoload.php';
 
-if ($conn->connect_error) {
-    die("DB Error: " . $conn->connect_error);
-}
+// MongoDB connection
+$client = new MongoDB\Client("mongodb://127.0.0.1:27017");
+$db = $client->tour_db;
 
-$tours = $conn->query("SELECT * FROM tours");
+$tours = $db->tours;
+
+// Fetch all tours
+$tourList = $tours->find();
 ?>
 
 <!DOCTYPE html>
@@ -76,10 +79,8 @@ $tours = $conn->query("SELECT * FROM tours");
 
         <div class="row">
 
-            <?php if($tours->num_rows > 0): ?>
-
-            <?php while($t = $tours->fetch_assoc()): ?>
-
+          <?php $hasData = false; ?>
+          <?php foreach($tourList as $t): $hasData = true; ?>
             <div class="col-md-4 mb-4">
 
                 <div class="card shadow-sm h-100">
@@ -114,9 +115,9 @@ $tours = $conn->query("SELECT * FROM tours");
 
             </div>
 
-            <?php endwhile; ?>
+            <?php endforeach; ?>
 
-            <?php else: ?>
+            <?php if(!$hasData): ?>
 
             <p class="text-center">No tours available. Please check later.</p>
 

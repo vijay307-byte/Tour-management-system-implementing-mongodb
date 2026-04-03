@@ -1,0 +1,17 @@
+{
+    "name": "user/tour",
+    "autoload": {
+        "psr-4": {
+            "User\\Tour\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Vijay",
+            "email": "vijayberva030705@gmail.com"
+        }
+    ],
+    "require": {
+        "mongodb/mongodb": "^2.2"
+    }
+}
