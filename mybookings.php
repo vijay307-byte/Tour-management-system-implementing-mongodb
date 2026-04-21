@@ -1,8 +1,6 @@
 <?php
 session_start();
-
 require 'vendor/autoload.php';
-
 // Must be logged in
 if(!isset($_SESSION['user'])){
     header("Location: login.php");
