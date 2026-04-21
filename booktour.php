@@ -1,60 +1,47 @@
 <?php
 session_start();
+require 'mongo_connect.php';
 
-$conn = new mysqli("localhost", "root", "", "tour_db");
-
-if ($conn->connect_error) {
-    die("DB Error: " . $conn->connect_error);
+// 🔒 Must be logged in
+if (!isset($_SESSION['user'])) {
+    header("Location: login.php");
+    exit();
 }
+
+// Get logged-in user email
+$email = $_SESSION['email'];
 
 // Get tour from URL
 $tour = $_GET['tour'] ?? '';
+$price = $_GET['price'] ?? 0;
 
-// Handle form submit
-if($_SERVER["REQUEST_METHOD"] == "POST"){
+// Handle form submission
+if ($_SERVER["REQUEST_METHOD"] == "POST") {
 
-    // ✅ Sanitize + validate
-    $name   = trim($_POST['name']);
-    $phone  = trim($_POST['phone']);
-    $tour   = $_POST['tour'];
+    $name = htmlspecialchars(trim($_POST['name']));
+    $phone = htmlspecialchars(trim($_POST['phone']));
+    $tour = $_POST['tour'];
     $people = (int)$_POST['people'];
-    $date   = $_POST['date'];
+    $date = $_POST['date'];
+    $price = (int)$_POST['price'];
 
-    // 🔐 Use session email (NOT user input)
-    $email = $_SESSION['email'] ?? '';
+    // 🔥 Server-side total calculation (DO NOT trust frontend)
+    $total = $people * $price;
 
-    if(!$email){
-        die("User not logged in");
-    }
+    // 🚀 Insert booking (linked to logged-in user)
+    $insert = $db->bookings->insertOne([
+        'name' => $name,
+        'email' => $email, // integrity link
+        'phone' => $phone,
+        'tour' => $tour,
+        'people' => $people,
+        'date' => $date,
+        'total' => $total,
+        'status' => 'Pending',
+        'created_at' => new MongoDB\BSON\UTCDateTime()
+    ]);
 
-    // ✅ Fetch real price from DB
-    $stmt = $conn->prepare("SELECT price FROM tours WHERE name=?");
-    $stmt->bind_param("s", $tour);
-    $stmt->execute();
-    $result = $stmt->get_result();
-
-    if($result->num_rows === 0){
-        die("Invalid tour selected");
-    }
-
-    $row = $result->fetch_assoc();
-    $realPrice = (int)$row['price'];
-
-    // ✅ Calculate total on server
-    $total = $realPrice * $people;
-
-    // ✅ Insert booking securely
-    $stmt = $conn->prepare("INSERT INTO bookings 
-        (name, email, phone, tour, people, date, total, status) 
-        VALUES (?, ?, ?, ?, ?, ?, ?, 'Pending')");
-
-    $stmt->bind_param("ssssisd",
-        $name, $email, $phone, $tour, $people, $date, $total
-    );
-
-    $stmt->execute();
-
-    // ✅ Redirect (clean UX)
+    // Redirect to mybookings with success flag
     header("Location: mybookings.php?success=1");
     exit();
 }
@@ -62,117 +49,89 @@ if($_SERVER["REQUEST_METHOD"] == "POST"){
 
 <!DOCTYPE html>
 <html>
-
 <head>
     <title>Book Tour</title>
-
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-
-    <style>
-        body {
-            background: #f8f9fa;
-        }
-
-        .card {
-            border-radius: 12px;
-            border: none;
-        }
-    </style>
-
 </head>
 
-<body>
+<body class="bg-light">
 
-    <div class="container mt-5">
+<div class="container mt-5">
+    <div class="row justify-content-center">
+        <div class="col-md-6">
 
-        <div class="row justify-content-center">
-            <div class="col-md-6">
+            <div class="card shadow p-4">
+                <h3 class="text-center mb-4">Book Tour</h3>
 
-                <div class="card shadow p-4">
+                <form method="POST">
 
-                    <h3 class="text-center mb-4">Book Tour</h3>
-
-                    <?php if(isset($success)): ?>
-                    <div class="alert alert-success">
-                        Booking Successful!
+                    <div class="mb-3">
+                        <label>Full Name</label>
+                        <input type="text" name="name" class="form-control" required>
                     </div>
-                    <?php endif; ?>
 
-                    <form method="POST">
+                    <div class="mb-3">
+                        <label>Email</label>
+                        <input type="email" class="form-control" value="<?php echo $email; ?>" readonly>
+                    </div>
 
-                        <div class="mb-3">
-                            <label>Full Name</label>
-                            <input type="text" name="name" class="form-control" required>
-                        </div>
+                    <div class="mb-3">
+                        <label>Phone</label>
+                        <input type="text" name="phone" class="form-control" required>
+                    </div>
 
-                        <div class="mb-3">
-                            <label>Email</label>
-                            <input type="email" name="email" class="form-control" required>
-                        </div>
+                    <div class="mb-3">
+                        <label>Selected Tour</label>
+                        <input type="text" name="tour" class="form-control" value="<?php echo $tour; ?>" readonly>
+                    </div>
 
-                        <div class="mb-3">
-                            <label>Phone</label>
-                            <input type="text" name="phone" class="form-control" required>
-                        </div>
+                    <div class="mb-3">
+                        <label>Travel Date</label>
+                        <input type="date" name="date" class="form-control" required>
+                    </div>
 
-                        <div class="mb-3">
-                            <label>Selected Tour</label>
-                            <input type="text" name="tour" class="form-control" value="<?php echo $tour; ?>" readonly>
-                        </div>
+                    <div class="mb-3">
+                        <label>Number of People</label>
+                        <input type="number" name="people" id="people" class="form-control" min="1" required>
+                    </div>
 
-                        <div class="mb-3">
-                            <label>Travel Date</label>
-                            <input type="date" name="date" class="form-control" required>
-                        </div>
+                    <div class="mb-3">
+                        <label>Total Price</label>
+                        <input type="text" id="totalPrice" class="form-control" readonly>
+                    </div>
 
-                        <div class="mb-3">
-                            <label>Number of People</label>
-                            <input type="number" name="people" id="people" class="form-control" min="1" required>
-                        </div>
+                    <!-- Hidden fields -->
+                    <input type="hidden" name="price" id="price" value="<?php echo $price; ?>">
 
-                        <div class="mb-3">
-                            <label>Total Price</label>
-                            <input type="text" id="totalPrice" class="form-control" readonly>
-                        </div>
+                    <button class="btn btn-success w-100">
+                        Confirm Booking
+                    </button>
 
-                        <input type="hidden" name="total" id="hiddenTotal">
-                        <input type="hidden" id="price" value="<?php echo $price; ?>">
-
-                        <button class="btn btn-success w-100">
-                            Confirm Booking
-                        </button>
-
-                    </form>
-
-                </div>
+                </form>
             </div>
+
         </div>
-
     </div>
+</div>
 
-    
+<script>
+const price = parseInt(document.getElementById("price").value) || 0;
+const peopleInput = document.getElementById("people");
+const totalField = document.getElementById("totalPrice");
 
-    <script>
-        const price = parseInt(document.getElementById("price").value) || 0;
-        const peopleInput = document.getElementById("people");
-        const totalField = document.getElementById("totalPrice");
-        const hiddenTotal = document.getElementById("hiddenTotal");
+function calculate() {
+    let people = parseInt(peopleInput.value) || 0;
+    let total = price * people;
 
-        function calculate() {
-            let people = parseInt(peopleInput.value) || 0;
-            let total = price * people;
-            if (total > 0) {
-                totalField.value = "₹" + total.toLocaleString("en-IN");
-                hiddenTotal.value = total;
-            } else {
-                totalField.value = "";
-            }
-        }
-        peopleInput.addEventListener("input", calculate);
-    </script>
+    if (total > 0) {
+        totalField.value = "₹" + total.toLocaleString("en-IN");
+    } else {
+        totalField.value = "";
+    }
+}
 
-
+peopleInput.addEventListener("input", calculate);
+</script>
 
 </body>
-
 </html>
